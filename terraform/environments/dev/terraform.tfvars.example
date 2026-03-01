@@ -1,0 +1,24 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is gitignored — never commit it with real values.
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars
+#   terraform apply
+
+resource_group_name = "rg-finops-dev"
+cluster_name        = "aks-finops-dev"
+location            = "australiaeast"     # change to your nearest Azure region
+kubernetes_version  = "1.29"
+
+system_node_count   = 2
+system_node_vm_size = "Standard_D2s_v5"  # 2 vCPU, 8Gi RAM — adequate for dev
+
+create_monitoring_node_pool = false       # set true to isolate monitoring on its own node
+
+tags = {
+  "environment" = "dev"
+  "managed-by"  = "terraform"
+  "project"     = "aks-finops-toolkit"
+  "owner"       = "your-name"
+}

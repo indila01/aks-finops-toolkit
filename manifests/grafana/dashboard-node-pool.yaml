@@ -1,0 +1,224 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finops-node-pool-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+    app: aks-finops-toolkit
+data:
+  node-pool-utilization.json: |-
+    {
+      "title": "Node Pool Utilization",
+      "uid": "finops-node-pool-04",
+      "tags": ["finops", "nodes", "capacity"],
+      "description": "Node-level CPU and memory utilization, bin-packing efficiency, and allocatable capacity. Low utilization across all nodes indicates the node pool can be scaled down.",
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "5m",
+      "time": { "from": "now-3h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Node CPU Utilization % (actual usage / allocatable)",
+          "description": "Below 30% across all nodes = candidate for node pool scale-down.",
+          "type": "bargauge",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+          "targets": [
+            {
+              "expr": "(\n  sum by (node) (rate(container_cpu_usage_seconds_total{container!=\"POD\", container!=\"\"}[5m]))\n  /\n  sum by (node) (kube_node_status_allocatable{resource=\"cpu\"})\n) * 100",
+              "legendFormat": "{{ node }}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 30 },
+                  { "color": "green", "value": 60 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "reduceOptions": { "calcs": ["lastNotNull"] }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Node Memory Utilization % (actual usage / allocatable)",
+          "type": "bargauge",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+          "targets": [
+            {
+              "expr": "(\n  sum by (node) (container_memory_working_set_bytes{container!=\"POD\", container!=\"\"})\n  /\n  sum by (node) (kube_node_status_allocatable{resource=\"memory\"})\n) * 100",
+              "legendFormat": "{{ node }}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 30 },
+                  { "color": "green", "value": 60 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "reduceOptions": { "calcs": ["lastNotNull"] }
+          }
+        },
+        {
+          "id": 3,
+          "title": "CPU Requested vs Allocatable per Node (bin-packing efficiency)",
+          "description": "How full each node is based on pod requests (not actual usage). High requested + low actual = waste.",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 10, "w": 24, "h": 9 },
+          "targets": [
+            {
+              "expr": "sum by (node) (kube_pod_container_resource_requests{resource=\"cpu\", container!=\"\"}) * 1000",
+              "legendFormat": "requested (m) — {{ node }}",
+              "refId": "REQUESTED"
+            },
+            {
+              "expr": "sum by (node) (kube_node_status_allocatable{resource=\"cpu\"}) * 1000",
+              "legendFormat": "allocatable (m) — {{ node }}",
+              "refId": "ALLOCATABLE"
+            },
+            {
+              "expr": "sum by (node) (rate(container_cpu_usage_seconds_total{container!=\"POD\", container!=\"\"}[5m])) * 1000",
+              "legendFormat": "actual (m) — {{ node }}",
+              "refId": "ACTUAL"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2 }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Node Count",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 19, "w": 4, "h": 4 },
+          "targets": [
+            {
+              "expr": "count(kube_node_info)",
+              "legendFormat": "Nodes",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "short", "displayName": "Total Nodes" }
+          }
+        },
+        {
+          "id": 5,
+          "title": "Cluster CPU Requests / Allocatable",
+          "type": "gauge",
+          "gridPos": { "x": 4, "y": 19, "w": 5, "h": 4 },
+          "targets": [
+            {
+              "expr": "(\n  sum(kube_pod_container_resource_requests{resource=\"cpu\", container!=\"\"})\n  /\n  sum(kube_node_status_allocatable{resource=\"cpu\"})\n) * 100",
+              "legendFormat": "CPU requested %",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 6,
+          "title": "Cluster Memory Requests / Allocatable",
+          "type": "gauge",
+          "gridPos": { "x": 9, "y": 19, "w": 5, "h": 4 },
+          "targets": [
+            {
+              "expr": "(\n  sum(kube_pod_container_resource_requests{resource=\"memory\", container!=\"\"})\n  /\n  sum(kube_node_status_allocatable{resource=\"memory\"})\n) * 100",
+              "legendFormat": "Memory requested %",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 7,
+          "title": "Node Readiness",
+          "type": "table",
+          "gridPos": { "x": 14, "y": 19, "w": 10, "h": 4 },
+          "targets": [
+            {
+              "expr": "kube_node_status_condition{condition=\"Ready\", status=\"true\"}",
+              "legendFormat": "{{ node }}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "Ready",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "custom": { "displayMode": "color-background" }
+            }
+          }
+        }
+      ]
+    }

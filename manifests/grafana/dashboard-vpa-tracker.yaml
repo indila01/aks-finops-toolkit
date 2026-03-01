@@ -1,0 +1,118 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finops-vpa-tracker-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+    app: aks-finops-toolkit
+data:
+  vpa-recommendation-tracker.json: |-
+    {
+      "title": "VPA Recommendation Tracker",
+      "uid": "finops-vpa-tracker-03",
+      "tags": ["finops", "vpa", "rightsizing"],
+      "description": "Shows VPA rightsizing recommendations per workload. Requires kube-state-metrics with verticalpodautoscalers collector enabled (set in values.yaml).",
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "5m",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "VPA CPU Target Recommendation vs Current Request (millicores)",
+          "description": "Green = VPA target. Blue = current request. Large gap = potential saving.",
+          "type": "table",
+          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 12 },
+          "targets": [
+            {
+              "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_target{resource=\"cpu\"} * 1000",
+              "legendFormat": "VPA target (m) — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}",
+              "instant": true,
+              "refId": "VPA_CPU_TARGET"
+            },
+            {
+              "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_lowerbound{resource=\"cpu\"} * 1000",
+              "legendFormat": "VPA lower (m) — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}",
+              "instant": true,
+              "refId": "VPA_CPU_LOWER"
+            },
+            {
+              "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_upperbound{resource=\"cpu\"} * 1000",
+              "legendFormat": "VPA upper (m) — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}",
+              "instant": true,
+              "refId": "VPA_CPU_UPPER"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "CPU (millicores)"
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "VPA Memory Target Recommendation vs Current Request (MiB)",
+          "type": "table",
+          "gridPos": { "x": 0, "y": 12, "w": 24, "h": 12 },
+          "targets": [
+            {
+              "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_target{resource=\"memory\"} / 1024 / 1024",
+              "legendFormat": "VPA target (MiB) — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}",
+              "instant": true,
+              "refId": "VPA_MEM_TARGET"
+            },
+            {
+              "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_lowerbound{resource=\"memory\"} / 1024 / 1024",
+              "legendFormat": "VPA lower (MiB) — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}",
+              "instant": true,
+              "refId": "VPA_MEM_LOWER"
+            },
+            {
+              "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_upperbound{resource=\"memory\"} / 1024 / 1024",
+              "legendFormat": "VPA upper (MiB) — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}",
+              "instant": true,
+              "refId": "VPA_MEM_UPPER"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "Memory (MiB)"
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Total VPA Objects by Namespace",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 24, "w": 8, "h": 5 },
+          "targets": [
+            {
+              "expr": "count by (namespace) (kube_verticalpodautoscaler_metadata_generation)",
+              "legendFormat": "{{ namespace }}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "VPA objects"
+            }
+          },
+          "options": { "reduceOptions": { "calcs": ["sum"] } }
+        },
+        {
+          "id": 4,
+          "title": "How to act on VPA recommendations",
+          "type": "text",
+          "gridPos": { "x": 8, "y": 24, "w": 16, "h": 5 },
+          "options": {
+            "content": "## Acting on VPA Recommendations\n\nVPA is running in **recommendation mode** — no pods are modified automatically.\n\nTo view recommendations via CLI:\n```\nkubectl describe vpa -n <namespace>\n```\n\nTo apply a recommendation manually, edit the Deployment:\n```\nkubectl edit deployment <name> -n <namespace>\n```\nUpdate `resources.requests.cpu` and `resources.requests.memory` to the **Target** values shown above.\n\n**Safe approach:** Apply lower bound first, monitor for 48h, then move to target.",
+            "mode": "markdown"
+          }
+        }
+      ]
+    }

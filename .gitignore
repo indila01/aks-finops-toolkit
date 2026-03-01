@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────────
+# Terraform
+# ─────────────────────────────────────────────
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ─────────────────────────────────────────────
+# Helm
+# ─────────────────────────────────────────────
+charts/*/charts/
+charts/*/tmpcharts/
+*.tgz
+
+# ─────────────────────────────────────────────
+# Secrets — never commit these
+# ─────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.pfx
+kubeconfig
+.kubeconfig
+secrets.yaml
+secrets.yml
+*-secret.yaml
+*-secret.yml
+
+# ─────────────────────────────────────────────
+# OS / Editor
+# ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─────────────────────────────────────────────
+# Misc
+# ─────────────────────────────────────────────
+*.log
+.env
+.env.*

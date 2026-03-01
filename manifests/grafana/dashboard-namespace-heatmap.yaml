@@ -1,0 +1,181 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finops-namespace-heatmap-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+    app: aks-finops-toolkit
+data:
+  namespace-efficiency-heatmap.json: |-
+    {
+      "title": "Namespace Efficiency Heatmap",
+      "uid": "finops-ns-heatmap-02",
+      "tags": ["finops", "cost", "namespace"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "5m",
+      "time": { "from": "now-24h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "CPU Efficiency by Namespace (actual / requested)",
+          "description": "Below 30% = over-provisioned (red). 30-60% = moderate (yellow). Above 60% = healthy (green).",
+          "type": "bargauge",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+          "targets": [
+            {
+              "expr": "namespace:cpu_efficiency:ratio * 100",
+              "legendFormat": "{{ namespace }}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 30 },
+                  { "color": "green", "value": 60 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "reduceOptions": { "calcs": ["lastNotNull"] }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Memory Efficiency by Namespace (actual / requested)",
+          "description": "Below 30% = over-provisioned (red). 30-60% = moderate (yellow). Above 60% = healthy (green).",
+          "type": "bargauge",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+          "targets": [
+            {
+              "expr": "namespace:memory_efficiency:ratio * 100",
+              "legendFormat": "{{ namespace }}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 30 },
+                  { "color": "green", "value": 60 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "gradient",
+            "reduceOptions": { "calcs": ["lastNotNull"] }
+          }
+        },
+        {
+          "id": 3,
+          "title": "CPU Waste by Namespace (requested - actual, millicores)",
+          "description": "Absolute wasted CPU per namespace. Ranked highest waste first.",
+          "type": "table",
+          "gridPos": { "x": 0, "y": 10, "w": 12, "h": 10 },
+          "targets": [
+            {
+              "expr": "round(namespace:cpu_waste_millicores:sum)",
+              "legendFormat": "{{ namespace }}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "sortBy", "options": { "fields": [{ "displayName": "Value", "desc": true }] } }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "Wasted CPU (m)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 500 },
+                  { "color": "red", "value": 2000 }
+                ]
+              },
+              "custom": { "displayMode": "color-background" }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Memory Waste by Namespace (requested - actual, MiB)",
+          "description": "Absolute wasted memory per namespace. Ranked highest waste first.",
+          "type": "table",
+          "gridPos": { "x": 12, "y": 10, "w": 12, "h": 10 },
+          "targets": [
+            {
+              "expr": "round(namespace:memory_waste_mib:sum)",
+              "legendFormat": "{{ namespace }}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "sortBy", "options": { "fields": [{ "displayName": "Value", "desc": true }] } }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "Wasted Memory (MiB)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 256 },
+                  { "color": "red", "value": 1024 }
+                ]
+              },
+              "custom": { "displayMode": "color-background" }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "CPU Requested vs Actual — Over Time (by Namespace)",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+          "targets": [
+            {
+              "expr": "sum by (namespace) (kube_pod_container_resource_requests{resource=\"cpu\", container!=\"\"}) * 1000",
+              "legendFormat": "requested — {{ namespace }}",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"POD\"}[5m])) * 1000",
+              "legendFormat": "actual — {{ namespace }}",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2 }
+            }
+          }
+        }
+      ]
+    }

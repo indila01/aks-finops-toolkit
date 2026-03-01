@@ -1,0 +1,139 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: finops-cost-alerts
+  namespace: monitoring
+  labels:
+    app: aks-finops-toolkit
+    release: aks-finops-toolkit
+spec:
+  groups:
+    # ─────────────────────────────────────────────
+    # CPU Over-Provisioning
+    # ─────────────────────────────────────────────
+    - name: cpu-overprovisioning
+      interval: 5m
+      rules:
+        - alert: PodCPUOverprovisioned
+          expr: |
+            (
+              kube_pod_container_resource_requests{resource="cpu", container!=""}
+              /
+              avg_over_time(
+                rate(container_cpu_usage_seconds_total{container!="", container!="POD"}[5m])[7d:1h]
+              )
+            ) > 3
+          for: 1h
+          labels:
+            severity: warning
+            category: finops
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} CPU is {{ $value | humanize }}x over-provisioned"
+            description: |
+              Container {{ $labels.container }} in pod {{ $labels.pod }} (namespace {{ $labels.namespace }})
+              has a CPU request {{ $value | humanize }}x higher than its 7-day average usage.
+              Consider reducing requests.cpu to save cluster capacity.
+              Check VPA recommendations: kubectl describe vpa -n {{ $labels.namespace }}
+            runbook_url: "https://github.com/your-username/aks-finops-toolkit/docs/runbooks/cpu-overprovisioned.md"
+
+    # ─────────────────────────────────────────────
+    # Memory Over-Provisioning
+    # ─────────────────────────────────────────────
+    - name: memory-overprovisioning
+      interval: 5m
+      rules:
+        - alert: PodMemoryOverprovisioned
+          expr: |
+            (
+              kube_pod_container_resource_requests{resource="memory", container!=""}
+              /
+              avg_over_time(
+                container_memory_working_set_bytes{container!="", container!="POD"}[7d:1h]
+              )
+            ) > 3
+          for: 1h
+          labels:
+            severity: warning
+            category: finops
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} memory is {{ $value | humanize }}x over-provisioned"
+            description: |
+              Container {{ $labels.container }} in pod {{ $labels.pod }} (namespace {{ $labels.namespace }})
+              has a memory request {{ $value | humanize }}x higher than its 7-day average working set.
+              Consider reducing requests.memory. VPA target recommendation available.
+            runbook_url: "https://github.com/your-username/aks-finops-toolkit/docs/runbooks/memory-overprovisioned.md"
+
+    # ─────────────────────────────────────────────
+    # Zombie Namespace Detection
+    # ─────────────────────────────────────────────
+    - name: zombie-namespaces
+      interval: 1h
+      rules:
+        - alert: ZombieNamespace
+          expr: |
+            (
+              sum by (namespace) (
+                rate(container_cpu_usage_seconds_total{container!="", container!="POD"}[1h])
+              ) < 0.001
+            )
+            and
+            (
+              count by (namespace) (
+                kube_pod_info{namespace!~"kube-system|monitoring|vpa-system|kube-public|default"}
+              ) > 0
+            )
+          for: 7d
+          labels:
+            severity: warning
+            category: finops
+          annotations:
+            summary: "Namespace {{ $labels.namespace }} appears to be a zombie (no meaningful CPU activity for 7 days)"
+            description: |
+              Namespace {{ $labels.namespace }} has pods running but CPU usage has been
+              below 1m cores for 7 consecutive days. This may be an abandoned staging
+              environment, feature branch, or demo namespace consuming cluster capacity.
+              Consider: kubectl delete namespace {{ $labels.namespace }}
+
+    # ─────────────────────────────────────────────
+    # Cluster-Level Efficiency
+    # ─────────────────────────────────────────────
+    - name: cluster-efficiency
+      interval: 15m
+      rules:
+        - alert: ClusterCPUEfficiencyLow
+          expr: |
+            (
+              sum(rate(container_cpu_usage_seconds_total{container!="POD"}[1h]))
+              /
+              sum(kube_pod_container_resource_requests{resource="cpu", container!=""})
+            ) < 0.2
+          for: 4h
+          labels:
+            severity: warning
+            category: finops
+          annotations:
+            summary: "Cluster CPU efficiency is {{ $value | humanizePercentage }} — below 20%"
+            description: |
+              The cluster is using less than 20% of its total requested CPU.
+              This suggests significant over-provisioning at the cluster level.
+              Review VPA recommendations across all namespaces.
+
+        - record: namespace:cpu_efficiency:ratio
+          expr: |
+            sum by (namespace) (
+              rate(container_cpu_usage_seconds_total{container!="POD"}[1h])
+            )
+            /
+            sum by (namespace) (
+              kube_pod_container_resource_requests{resource="cpu", container!=""}
+            )
+
+        - record: namespace:memory_efficiency:ratio
+          expr: |
+            sum by (namespace) (
+              container_memory_working_set_bytes{container!="POD"}
+            )
+            /
+            sum by (namespace) (
+              kube_pod_container_resource_requests{resource="memory", container!=""}
+            )

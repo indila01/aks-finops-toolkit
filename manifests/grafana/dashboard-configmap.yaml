@@ -1,0 +1,154 @@
+---
+# This ConfigMap is provisioned by Grafana's sidecar (grafana-sc-dashboard).
+# The label "grafana_dashboard: 1" causes it to be auto-loaded.
+#
+# The dashboard JSON below covers: Resource Waste Overview
+# Additional dashboards follow in separate ConfigMaps.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finops-resource-waste-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+    app: aks-finops-toolkit
+data:
+  resource-waste-overview.json: |-
+    {
+      "title": "Resource Waste Overview",
+      "uid": "finops-waste-01",
+      "tags": ["finops", "cost", "aks"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "5m",
+      "time": { "from": "now-24h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "CPU Waste by Pod (Requested - Actual, millicores)",
+          "type": "table",
+          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
+          "targets": [
+            {
+              "expr": "round(\n  (\n    kube_pod_container_resource_requests{resource=\"cpu\", container!=\"\"}\n    -\n    avg_over_time(rate(container_cpu_usage_seconds_total{container!=\"\", container!=\"POD\"}[5m])[1h:5m])\n  ) * 1000\n)",
+              "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "sortBy", "options": { "fields": [{ "displayName": "Value", "desc": true }] } },
+            { "id": "limit", "options": { "limitCount": 50 } }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "Wasted CPU (m)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 100 },
+                  { "color": "red", "value": 500 }
+                ]
+              },
+              "custom": { "displayMode": "color-background" }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Memory Waste by Pod (Requested - Actual, MiB)",
+          "type": "table",
+          "gridPos": { "x": 0, "y": 10, "w": 24, "h": 10 },
+          "targets": [
+            {
+              "expr": "round(\n  (\n    kube_pod_container_resource_requests{resource=\"memory\", container!=\"\"}\n    -\n    avg_over_time(container_memory_working_set_bytes{container!=\"\", container!=\"POD\"}[1h])\n  ) / 1024 / 1024\n)",
+              "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "sortBy", "options": { "fields": [{ "displayName": "Value", "desc": true }] } },
+            { "id": "limit", "options": { "limitCount": 50 } }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "Wasted Memory (MiB)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 128 },
+                  { "color": "red", "value": 512 }
+                ]
+              },
+              "custom": { "displayMode": "color-background" }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "CPU Efficiency by Namespace (%)",
+          "type": "bargauge",
+          "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "namespace:cpu_efficiency:ratio * 100",
+              "legendFormat": "{{namespace}}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 30 },
+                  { "color": "green", "value": 60 }
+                ]
+              }
+            }
+          },
+          "options": { "orientation": "horizontal", "displayMode": "gradient" }
+        },
+        {
+          "id": 4,
+          "title": "Memory Efficiency by Namespace (%)",
+          "type": "bargauge",
+          "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "namespace:memory_efficiency:ratio * 100",
+              "legendFormat": "{{namespace}}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 30 },
+                  { "color": "green", "value": 60 }
+                ]
+              }
+            }
+          },
+          "options": { "orientation": "horizontal", "displayMode": "gradient" }
+        }
+      ]
+    }

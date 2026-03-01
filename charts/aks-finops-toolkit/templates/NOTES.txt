@@ -1,0 +1,65 @@
+╔══════════════════════════════════════════════════════════════════╗
+║         AKS FinOps Toolkit — Deployed Successfully               ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 1 — Wait for pods to be ready (~2-3 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  kubectl get pods -n {{ .Release.Namespace }} -w
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 2 — Access Grafana
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  kubectl port-forward svc/{{ .Release.Name }}-grafana 3000:80 -n {{ .Release.Namespace }}
+
+  Open: http://localhost:3000
+  User: admin
+  Pass: prom-operator  ← change this in production via grafana.adminPassword
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 3 — Deploy the test workload to validate dashboards + alerts
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  kubectl apply -f examples/test-deployment.yaml
+
+  This deploys an intentionally over-provisioned Nginx pod that will:
+  → Appear in the Grafana waste dashboard within ~5 minutes
+  → Receive a VPA recommendation within ~30 minutes
+  → Trigger a Slack alert within ~1 hour
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 4 — Check Prometheus scrape targets
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  kubectl port-forward svc/{{ .Release.Name }}-kube-prometheus-stack-prometheus 9090:9090 -n {{ .Release.Namespace }}
+
+  Open: http://localhost:9090/targets
+  All targets should show State: UP
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 5 — Run the CLI waste report
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ./scripts/waste-report.sh
+
+  Optional: filter by namespace
+  ./scripts/waste-report.sh <namespace>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VPA Recommendations
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  VPA is running in recommendation mode (updateMode: Off).
+  No pods will be modified automatically.
+
+  View recommendations:
+  kubectl describe vpa --all-namespaces
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Docs: https://github.com/your-username/aks-finops-toolkit
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

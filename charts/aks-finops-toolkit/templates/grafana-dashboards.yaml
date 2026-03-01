@@ -1,0 +1,332 @@
+{{/*
+  Grafana dashboard ConfigMaps — rendered by Helm so they're deployed as part of
+  `helm install` rather than requiring a separate `kubectl apply` step.
+
+  The `grafana_dashboard: "1"` label causes Grafana's sidecar to auto-load them.
+  Dashboard JSON is sourced from manifests/grafana/ and embedded here via Helm.
+*/}}
+
+---
+# Dashboard 1: Resource Waste Overview
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aks-finops-toolkit.fullname" . }}-dashboard-waste-overview
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aks-finops-toolkit.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  resource-waste-overview.json: |-
+    {
+      "title": "Resource Waste Overview",
+      "uid": "finops-waste-01",
+      "tags": ["finops", "cost", "aks"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "5m",
+      "time": { "from": "now-24h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "CPU Waste by Pod — Requested minus Actual (millicores)",
+          "description": "Ranked highest waste first. These are your top rightsizing candidates.",
+          "type": "table",
+          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
+          "targets": [
+            {
+              "expr": "round(\n  (\n    kube_pod_container_resource_requests{resource=\"cpu\", container!=\"\"}\n    -\n    avg_over_time(rate(container_cpu_usage_seconds_total{container!=\"\", container!=\"POD\"}[5m])[1h:5m])\n  ) * 1000\n)",
+              "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "sortBy", "options": { "fields": [{ "displayName": "Value", "desc": true }] } },
+            { "id": "limit", "options": { "limitCount": 50 } }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "Wasted CPU (m)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 100 },
+                  { "color": "red", "value": 500 }
+                ]
+              },
+              "custom": { "displayMode": "color-background" }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Memory Waste by Pod — Requested minus Actual (MiB)",
+          "type": "table",
+          "gridPos": { "x": 0, "y": 10, "w": 24, "h": 10 },
+          "targets": [
+            {
+              "expr": "round(\n  (\n    kube_pod_container_resource_requests{resource=\"memory\", container!=\"\"}\n    -\n    avg_over_time(container_memory_working_set_bytes{container!=\"\", container!=\"POD\"}[1h])\n  ) / 1024 / 1024\n)",
+              "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            { "id": "sortBy", "options": { "fields": [{ "displayName": "Value", "desc": true }] } },
+            { "id": "limit", "options": { "limitCount": 50 } }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "displayName": "Wasted Memory (MiB)",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 128 },
+                  { "color": "red", "value": 512 }
+                ]
+              },
+              "custom": { "displayMode": "color-background" }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "CPU Efficiency by Namespace (%)",
+          "type": "bargauge",
+          "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "namespace:cpu_efficiency:ratio * 100",
+              "legendFormat": "{{namespace}}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent", "min": 0, "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 30 },
+                  { "color": "green", "value": 60 }
+                ]
+              }
+            }
+          },
+          "options": { "orientation": "horizontal", "displayMode": "gradient" }
+        },
+        {
+          "id": 4,
+          "title": "Memory Efficiency by Namespace (%)",
+          "type": "bargauge",
+          "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "namespace:memory_efficiency:ratio * 100",
+              "legendFormat": "{{namespace}}",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent", "min": 0, "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 30 },
+                  { "color": "green", "value": 60 }
+                ]
+              }
+            }
+          },
+          "options": { "orientation": "horizontal", "displayMode": "gradient" }
+        }
+      ]
+    }
+
+---
+# Dashboard 2: Namespace Efficiency Heatmap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aks-finops-toolkit.fullname" . }}-dashboard-ns-heatmap
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aks-finops-toolkit.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  namespace-efficiency-heatmap.json: |-
+    {
+      "title": "Namespace Efficiency Heatmap",
+      "uid": "finops-ns-heatmap-02",
+      "tags": ["finops", "cost", "namespace"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "5m",
+      "time": { "from": "now-24h", "to": "now" },
+      "panels": [
+        {
+          "id": 1, "title": "CPU Efficiency by Namespace (%)", "type": "bargauge",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+          "targets": [{ "expr": "namespace:cpu_efficiency:ratio * 100", "legendFormat": "{{ namespace }}", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 30 }, { "color": "green", "value": 60 }] } } },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 2, "title": "Memory Efficiency by Namespace (%)", "type": "bargauge",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+          "targets": [{ "expr": "namespace:memory_efficiency:ratio * 100", "legendFormat": "{{ namespace }}", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 30 }, { "color": "green", "value": 60 }] } } },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 3, "title": "CPU Waste by Namespace (millicores)", "type": "table",
+          "gridPos": { "x": 0, "y": 10, "w": 12, "h": 10 },
+          "targets": [{ "expr": "round(namespace:cpu_waste_millicores:sum)", "legendFormat": "{{ namespace }}", "instant": true, "refId": "A" }],
+          "transformations": [{ "id": "sortBy", "options": { "fields": [{ "displayName": "Value", "desc": true }] } }],
+          "fieldConfig": { "defaults": { "unit": "short", "displayName": "Wasted CPU (m)", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 2000 }] }, "custom": { "displayMode": "color-background" } } }
+        },
+        {
+          "id": 4, "title": "Memory Waste by Namespace (MiB)", "type": "table",
+          "gridPos": { "x": 12, "y": 10, "w": 12, "h": 10 },
+          "targets": [{ "expr": "round(namespace:memory_waste_mib:sum)", "legendFormat": "{{ namespace }}", "instant": true, "refId": "A" }],
+          "transformations": [{ "id": "sortBy", "options": { "fields": [{ "displayName": "Value", "desc": true }] } }],
+          "fieldConfig": { "defaults": { "unit": "short", "displayName": "Wasted Memory (MiB)", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 256 }, { "color": "red", "value": 1024 }] }, "custom": { "displayMode": "color-background" } } }
+        },
+        {
+          "id": 5, "title": "CPU Requested vs Actual Over Time", "type": "timeseries",
+          "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+          "targets": [
+            { "expr": "sum by (namespace) (kube_pod_container_resource_requests{resource=\"cpu\", container!=\"\"}) * 1000", "legendFormat": "requested — {{ namespace }}", "refId": "A" },
+            { "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"POD\"}[5m])) * 1000", "legendFormat": "actual — {{ namespace }}", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } } }
+        }
+      ]
+    }
+
+---
+# Dashboard 3: VPA Recommendation Tracker
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aks-finops-toolkit.fullname" . }}-dashboard-vpa-tracker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aks-finops-toolkit.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  vpa-recommendation-tracker.json: |-
+    {
+      "title": "VPA Recommendation Tracker",
+      "uid": "finops-vpa-tracker-03",
+      "tags": ["finops", "vpa", "rightsizing"],
+      "description": "VPA rightsizing recommendations. Requires kube-state-metrics with verticalpodautoscalers collector enabled.",
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "5m",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1, "title": "VPA CPU Target Recommendations (millicores)", "type": "table",
+          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 12 },
+          "targets": [
+            { "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_target{resource=\"cpu\"} * 1000", "legendFormat": "target — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}", "instant": true, "refId": "A" },
+            { "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_lowerbound{resource=\"cpu\"} * 1000", "legendFormat": "lower — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}", "instant": true, "refId": "B" },
+            { "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_upperbound{resource=\"cpu\"} * 1000", "legendFormat": "upper — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}", "instant": true, "refId": "C" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "displayName": "CPU (m)" } }
+        },
+        {
+          "id": 2, "title": "VPA Memory Target Recommendations (MiB)", "type": "table",
+          "gridPos": { "x": 0, "y": 12, "w": 24, "h": 12 },
+          "targets": [
+            { "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_target{resource=\"memory\"} / 1024 / 1024", "legendFormat": "target — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}", "instant": true, "refId": "A" },
+            { "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_lowerbound{resource=\"memory\"} / 1024 / 1024", "legendFormat": "lower — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}", "instant": true, "refId": "B" },
+            { "expr": "kube_verticalpodautoscaler_status_recommendation_containerrecommendations_upperbound{resource=\"memory\"} / 1024 / 1024", "legendFormat": "upper — {{ namespace }}/{{ verticalpodautoscaler }}/{{ container }}", "instant": true, "refId": "C" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "displayName": "Memory (MiB)" } }
+        },
+        {
+          "id": 3, "title": "How to apply recommendations", "type": "text",
+          "gridPos": { "x": 0, "y": 24, "w": 24, "h": 5 },
+          "options": { "content": "## Applying VPA Recommendations\n\nVPA runs in **recommendation mode only** — pods are never modified automatically.\n\n```bash\n# View all recommendations\nkubectl describe vpa --all-namespaces\n\n# Apply manually: edit the Deployment and update resources.requests\nkubectl edit deployment <name> -n <namespace>\n```\n\n**Safe approach:** Set to the `Lower Bound` first, observe for 48h, then move to `Target`.", "mode": "markdown" }
+        }
+      ]
+    }
+
+---
+# Dashboard 4: Node Pool Utilization
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aks-finops-toolkit.fullname" . }}-dashboard-node-pool
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aks-finops-toolkit.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  node-pool-utilization.json: |-
+    {
+      "title": "Node Pool Utilization",
+      "uid": "finops-node-pool-04",
+      "tags": ["finops", "nodes", "capacity"],
+      "description": "Node-level CPU and memory utilization and bin-packing efficiency.",
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "5m",
+      "time": { "from": "now-3h", "to": "now" },
+      "panels": [
+        {
+          "id": 1, "title": "Node CPU Utilization % (actual / allocatable)", "type": "bargauge",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+          "targets": [{ "expr": "(\n  sum by (node) (rate(container_cpu_usage_seconds_total{container!=\"POD\", container!=\"\"}[5m]))\n  /\n  sum by (node) (kube_node_status_allocatable{resource=\"cpu\"})\n) * 100", "legendFormat": "{{ node }}", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 30 }, { "color": "green", "value": 60 }] } } },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 2, "title": "Node Memory Utilization % (actual / allocatable)", "type": "bargauge",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+          "targets": [{ "expr": "(\n  sum by (node) (container_memory_working_set_bytes{container!=\"POD\", container!=\"\"})\n  /\n  sum by (node) (kube_node_status_allocatable{resource=\"memory\"})\n) * 100", "legendFormat": "{{ node }}", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 30 }, { "color": "green", "value": 60 }] } } },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "id": 3, "title": "CPU Requested vs Allocatable vs Actual per Node", "type": "timeseries",
+          "gridPos": { "x": 0, "y": 10, "w": 24, "h": 9 },
+          "targets": [
+            { "expr": "sum by (node) (kube_pod_container_resource_requests{resource=\"cpu\", container!=\"\"}) * 1000", "legendFormat": "requested (m) — {{ node }}", "refId": "A" },
+            { "expr": "sum by (node) (kube_node_status_allocatable{resource=\"cpu\"}) * 1000", "legendFormat": "allocatable (m) — {{ node }}", "refId": "B" },
+            { "expr": "sum by (node) (rate(container_cpu_usage_seconds_total{container!=\"POD\", container!=\"\"}[5m])) * 1000", "legendFormat": "actual (m) — {{ node }}", "refId": "C" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } } }
+        },
+        {
+          "id": 4, "title": "Node Count", "type": "stat",
+          "gridPos": { "x": 0, "y": 19, "w": 6, "h": 4 },
+          "targets": [{ "expr": "count(kube_node_info)", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "short", "displayName": "Total Nodes" } }
+        },
+        {
+          "id": 5, "title": "Cluster CPU Requests / Allocatable", "type": "gauge",
+          "gridPos": { "x": 6, "y": 19, "w": 6, "h": 4 },
+          "targets": [{ "expr": "(\n  sum(kube_pod_container_resource_requests{resource=\"cpu\", container!=\"\"})\n  /\n  sum(kube_node_status_allocatable{resource=\"cpu\"})\n) * 100", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] } } }
+        },
+        {
+          "id": 6, "title": "Cluster Memory Requests / Allocatable", "type": "gauge",
+          "gridPos": { "x": 12, "y": 19, "w": 6, "h": 4 },
+          "targets": [{ "expr": "(\n  sum(kube_pod_container_resource_requests{resource=\"memory\", container!=\"\"})\n  /\n  sum(kube_node_status_allocatable{resource=\"memory\"})\n) * 100", "instant": true, "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] } } }
+        }
+      ]
+    }

@@ -1,0 +1,63 @@
+# Example VPA objects for common workload types.
+# Apply these to your app namespaces, replacing <deployment-name> and <namespace>.
+#
+# IMPORTANT: updateMode is "Off" — recommendations only, no auto-apply.
+# To view recommendations: kubectl describe vpa <name> -n <namespace>
+# Or check the Grafana "VPA Recommendation Tracker" dashboard.
+
+---
+# Generic Deployment VPA
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: example-api-vpa
+  namespace: default
+  labels:
+    app.kubernetes.io/managed-by: aks-finops-toolkit
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: example-api  # Replace with your deployment name
+  updatePolicy:
+    updateMode: "Off"  # Recommendation only — safe for production
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "*"
+        minAllowed:
+          cpu: 10m
+          memory: 32Mi
+        maxAllowed:
+          cpu: 4
+          memory: 8Gi
+        controlledResources: ["cpu", "memory"]
+        controlledValues: RequestsAndLimits
+
+---
+# StatefulSet VPA (e.g., databases)
+# Note: VPA with StatefulSets requires more care — eviction can cause data risk.
+# Review recommendations but apply manually.
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: example-statefulset-vpa
+  namespace: default
+  labels:
+    app.kubernetes.io/managed-by: aks-finops-toolkit
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: example-statefulset  # Replace with your StatefulSet name
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "*"
+        minAllowed:
+          cpu: 50m
+          memory: 128Mi
+        maxAllowed:
+          cpu: 8
+          memory: 16Gi
+        controlledResources: ["cpu", "memory"]

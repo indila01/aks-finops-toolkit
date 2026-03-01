@@ -1,0 +1,161 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "aks-finops-toolkit.fullname" . }}-cost-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aks-finops-toolkit.labels" . | nindent 4 }}
+    # These labels ensure kube-prometheus-stack's Prometheus picks up this rule.
+    release: {{ .Release.Name }}
+    app: kube-prometheus-stack
+spec:
+  groups:
+    # ─────────────────────────────────────────────
+    # CPU Over-Provisioning
+    # ─────────────────────────────────────────────
+    - name: finops.cpu-overprovisioning
+      interval: 5m
+      rules:
+        - alert: PodCPUOverprovisioned
+          expr: |
+            (
+              kube_pod_container_resource_requests{resource="cpu", container!=""}
+              /
+              avg_over_time(
+                rate(container_cpu_usage_seconds_total{container!="", container!="POD"}[5m])[7d:1h]
+              )
+            ) > 3
+          for: 1h
+          labels:
+            severity: warning
+            category: finops
+          annotations:
+            summary: "Pod {{ "{{" }} $labels.namespace {{ "}}" }}/{{ "{{" }} $labels.pod {{ "}}" }} CPU is {{ "{{" }} $value | humanize {{ "}}" }}x over-provisioned"
+            description: |
+              Container {{ "{{" }} $labels.container {{ "}}" }} has a CPU request {{ "{{" }} $value | humanize {{ "}}" }}x
+              higher than its 7-day average usage. Consider rightsizing.
+              Check VPA: kubectl describe vpa -n {{ "{{" }} $labels.namespace {{ "}}" }}
+
+    # ─────────────────────────────────────────────
+    # Memory Over-Provisioning
+    # ─────────────────────────────────────────────
+    - name: finops.memory-overprovisioning
+      interval: 5m
+      rules:
+        - alert: PodMemoryOverprovisioned
+          expr: |
+            (
+              kube_pod_container_resource_requests{resource="memory", container!=""}
+              /
+              avg_over_time(
+                container_memory_working_set_bytes{container!="", container!="POD"}[7d:1h]
+              )
+            ) > 3
+          for: 1h
+          labels:
+            severity: warning
+            category: finops
+          annotations:
+            summary: "Pod {{ "{{" }} $labels.namespace {{ "}}" }}/{{ "{{" }} $labels.pod {{ "}}" }} memory is {{ "{{" }} $value | humanize {{ "}}" }}x over-provisioned"
+            description: |
+              Container {{ "{{" }} $labels.container {{ "}}" }} has a memory request {{ "{{" }} $value | humanize {{ "}}" }}x
+              higher than its 7-day average working set. VPA target recommendation available.
+
+    # ─────────────────────────────────────────────
+    # Zombie Namespace Detection
+    # ─────────────────────────────────────────────
+    - name: finops.zombie-namespaces
+      interval: 1h
+      rules:
+        - alert: ZombieNamespace
+          expr: |
+            (
+              sum by (namespace) (
+                rate(container_cpu_usage_seconds_total{container!="", container!="POD"}[1h])
+              ) < 0.001
+            )
+            and
+            (
+              count by (namespace) (
+                kube_pod_info{namespace!~"kube-system|monitoring|vpa-system|kube-public|default"}
+              ) > 0
+            )
+          for: 7d
+          labels:
+            severity: warning
+            category: finops
+          annotations:
+            summary: "Namespace {{ "{{" }} $labels.namespace {{ "}}" }} has had no meaningful activity for 7 days"
+            description: |
+              Namespace {{ "{{" }} $labels.namespace {{ "}}" }} has running pods but CPU usage has been
+              below 1m cores for 7 consecutive days. This may be an abandoned staging or
+              demo namespace. Consider: kubectl delete namespace {{ "{{" }} $labels.namespace {{ "}}" }}
+
+    # ─────────────────────────────────────────────
+    # Cluster-Level Efficiency
+    # ─────────────────────────────────────────────
+    - name: finops.cluster-efficiency
+      interval: 15m
+      rules:
+        - alert: ClusterCPUEfficiencyLow
+          expr: |
+            (
+              sum(rate(container_cpu_usage_seconds_total{container!="POD"}[1h]))
+              /
+              sum(kube_pod_container_resource_requests{resource="cpu", container!=""})
+            ) < 0.2
+          for: 4h
+          labels:
+            severity: warning
+            category: finops
+          annotations:
+            summary: "Cluster CPU efficiency is {{ "{{" }} $value | humanizePercentage {{ "}}" }} — below 20%"
+            description: |
+              The cluster is using less than 20% of its total requested CPU.
+              Review VPA recommendations across all namespaces.
+
+    # ─────────────────────────────────────────────
+    # Recording Rules (used by Grafana dashboards)
+    # ─────────────────────────────────────────────
+    - name: finops.recording-rules
+      interval: 5m
+      rules:
+        - record: namespace:cpu_efficiency:ratio
+          expr: |
+            sum by (namespace) (
+              rate(container_cpu_usage_seconds_total{container!="POD"}[1h])
+            )
+            /
+            sum by (namespace) (
+              kube_pod_container_resource_requests{resource="cpu", container!=""}
+            )
+
+        - record: namespace:memory_efficiency:ratio
+          expr: |
+            sum by (namespace) (
+              container_memory_working_set_bytes{container!="POD"}
+            )
+            /
+            sum by (namespace) (
+              kube_pod_container_resource_requests{resource="memory", container!=""}
+            )
+
+        - record: namespace:cpu_waste_millicores:sum
+          expr: |
+            sum by (namespace) (
+              (
+                kube_pod_container_resource_requests{resource="cpu", container!=""}
+                - avg_over_time(
+                    rate(container_cpu_usage_seconds_total{container!="", container!="POD"}[5m])[1h:5m]
+                  )
+              ) * 1000
+            )
+
+        - record: namespace:memory_waste_mib:sum
+          expr: |
+            sum by (namespace) (
+              (
+                kube_pod_container_resource_requests{resource="memory", container!=""}
+                - avg_over_time(container_memory_working_set_bytes{container!="", container!="POD"}[1h])
+              ) / 1024 / 1024
+            )

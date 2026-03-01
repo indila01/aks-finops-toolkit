@@ -1,0 +1,163 @@
+# AKS FinOps Toolkit — Helm Values
+# Override specific values with --set or a custom values file.
+
+# ─────────────────────────────────────────────
+# Alertmanager: Slack Integration
+# ─────────────────────────────────────────────
+alertmanager:
+  slack:
+    # REQUIRED: set via --set or environment-specific values file
+    # Never commit this value to source control
+    webhookUrl: ""
+    channel: "#cost-alerts"
+    username: "AKS FinOps Bot"
+
+# ─────────────────────────────────────────────
+# kube-prometheus-stack sub-chart values
+# https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+# ─────────────────────────────────────────────
+kube-prometheus-stack:
+  enabled: true
+
+  # Prometheus configuration
+  prometheus:
+    prometheusSpec:
+      retention: 15d
+      retentionSize: "10GB"
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+      # Load our custom PrometheusRules from the monitoring namespace
+      ruleNamespaceSelector: {}
+      ruleSelector: {}
+
+  # Grafana configuration
+  grafana:
+    enabled: true
+    adminPassword: "prom-operator"  # Change in production
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Dashboard provisioning via ConfigMaps
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        labelValue: "1"
+        searchNamespace: monitoring
+      datasources:
+        enabled: true
+
+    # Grafana.ini overrides
+    grafana.ini:
+      server:
+        root_url: "%(protocol)s://%(domain)s/"
+      analytics:
+        reporting_enabled: false
+        check_for_updates: false
+
+  # Alertmanager configuration
+  # NOTE: The full Alertmanager config (including Slack routing) is managed via
+  # charts/templates/alertmanager-config.yaml so that the webhookUrl is properly
+  # templated by Helm. Only resource sizing is set here.
+  alertmanager:
+    alertmanagerSpec:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
+  # kube-state-metrics — enabled by default in kube-prometheus-stack
+  # GAP-06 fix: enable VPA resource collection so the VPA dashboard has data.
+  kube-state-metrics:
+    collectors:
+      - certificatesigningrequests
+      - configmaps
+      - cronjobs
+      - daemonsets
+      - deployments
+      - endpoints
+      - horizontalpodautoscalers
+      - ingresses
+      - jobs
+      - leases
+      - limitranges
+      - mutatingwebhookconfigurations
+      - namespaces
+      - networkpolicies
+      - nodes
+      - persistentvolumeclaims
+      - persistentvolumes
+      - poddisruptionbudgets
+      - pods
+      - replicasets
+      - replicationcontrollers
+      - resourcequotas
+      - secrets
+      - serviceaccounts
+      - services
+      - statefulsets
+      - storageclasses
+      - validatingwebhookconfigurations
+      - verticalpodautoscalers   # <-- enables VPA recommendation metrics
+      - volumeattachments
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+  # Node exporter
+  prometheus-node-exporter:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+
+# ─────────────────────────────────────────────
+# VPA sub-chart values
+# https://charts.fairwinds.com/stable/vpa
+# ─────────────────────────────────────────────
+vpa:
+  enabled: true
+
+  recommender:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 512Mi
+
+  updater:
+    # Updater is disabled — we use recommendation mode only
+    enabled: false
+
+  admissionController:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi

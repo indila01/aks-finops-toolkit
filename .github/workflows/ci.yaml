@@ -1,0 +1,77 @@
+name: CI — Validate & Lint
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  terraform-validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive terraform/
+
+      - name: Terraform Init (modules/aks)
+        run: terraform init -backend=false
+        working-directory: terraform/modules/aks
+
+      - name: Terraform Validate (modules/aks)
+        run: terraform validate
+        working-directory: terraform/modules/aks
+
+  helm-lint:
+    name: Helm Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Add Helm repos
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add fairwinds-stable https://charts.fairwinds.com/stable
+          helm repo update
+
+      - name: Helm Dependency Update
+        run: helm dependency update charts/aks-finops-toolkit
+
+      - name: Helm Lint
+        run: |
+          helm lint charts/aks-finops-toolkit \
+            --set alertmanager.slack.webhookUrl="https://hooks.slack.com/test"
+
+  manifest-validate:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          wget https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate manifests
+        run: |
+          kubeconform \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -summary \
+            manifests/alerting/ \
+            manifests/grafana/ \
+            examples/

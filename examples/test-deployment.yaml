@@ -1,0 +1,83 @@
+# test-deployment.yaml
+# Intentionally over-provisioned Nginx deployment for testing the FinOps toolkit.
+# This workload will:
+#   - Appear at the top of the Grafana Resource Waste dashboard
+#   - Receive a VPA recommendation within 10-30 minutes
+#   - Trigger a Slack alert within ~1 hour (after the evaluation window)
+#
+# Usage:
+#   kubectl apply -f examples/test-deployment.yaml
+#   kubectl apply -f manifests/vpa/test-vpa.yaml
+#
+# Cleanup:
+#   kubectl delete -f examples/test-deployment.yaml
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: finops-test
+  labels:
+    app.kubernetes.io/managed-by: aks-finops-toolkit
+    purpose: cost-testing
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: overprovisioned-nginx
+  namespace: finops-test
+  labels:
+    app: nginx
+    cost-center: "test"
+    app.kubernetes.io/managed-by: aks-finops-toolkit
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              # Intentionally high — nginx serving no real traffic uses ~5m CPU
+              cpu: "1000m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1Gi"
+
+---
+# VPA object for the test deployment
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: overprovisioned-nginx-vpa
+  namespace: finops-test
+  labels:
+    app.kubernetes.io/managed-by: aks-finops-toolkit
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: overprovisioned-nginx
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: nginx
+        minAllowed:
+          cpu: 5m
+          memory: 16Mi
+        maxAllowed:
+          cpu: 500m
+          memory: 256Mi
+        controlledResources: ["cpu", "memory"]
